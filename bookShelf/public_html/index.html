@@ -1,0 +1,855 @@
+<!DOCTYPE HTML>
+<html>
+   <head>
+   <title>PhoneGap Application</title>
+   <meta name="viewport" content="width=device-width, initial-scale=1"> 
+
+  <link rel="stylesheet" href="jquerymobile/jquery.mobile-1.1.0.min.css" />
+  <script src="jquerymobile/jquery-1.7.1.min.js"></script>
+  <script src="jquerymobile/jquery.mobile-1.1.0.min.js"></script>
+   <script type = "text/javascript" charset = "utf-8" src = "cordova.js"></script>
+   <script type = "text/javascript" charset = "utf-8" src = "cordova_plugins.js"></script>
+   <script type = "text/javascript" charset = "utf-8" src = "phonegap.js"></script>
+   
+   <script type = "text/javascript">
+   
+   //runs code determined on which page we are showing
+   $(document).on("pagebeforeshow", "#shelf", loadShelf );
+   $(document).on("pagebeforeshow", "#home", loadDB );
+   $(document).on("pagebeforeshow", "#loans", loadLoans );
+   $(document).on("pagebeforeshow", "#loanInfo", displayContactLoans );
+   $(document).on("pagebeforeshow", "#addLoan", addLoan );
+   $(document).on("pagebeforeshow", "#deleteLoan", deleteLoan );
+   $(document).on("pagebeforeshow", "#removeBook", displayRemoveBook);
+   $(document).on("pagebeforeshow", "#addBook", emptyBookFields);
+   
+      function onBodyLoad()
+      {
+         document.addEventListener("deviceready", PhonegapLoaded, false);
+      }
+      function PhonegapLoaded()
+      {	 
+		 
+      }
+	  
+	   //Store our data from the text file (All lines)
+	  var data;
+	  
+	  //Load from script functions
+	  function gotFile(fileEntry)
+	  {
+		//process the file
+		//Process file with the anonymous function
+		fileEntry.file(function(file){
+		//Create file reader to read a text file
+			var reader = new FileReader();
+			//Setup another anonymous function to process each line
+			reader.onloadend = function(e)
+			{
+				//this.result stores all of the lines from the text file
+				data = this.result;
+				loadDBFirst();
+			}
+			
+			reader.readAsText(file);
+		});
+	  }
+	  
+	  //The code run when they reset the database
+	   function loadDBFirst()
+	  {
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//run statements in queryDB against the db
+		db.transaction(populateDB, Error, successDB);
+	  }
+	   
+	   //Run when the user successfully resets the DB
+	  function successDB()
+	  {
+		window.plugins.toast.showShortBottom('You have reset the database');
+		window.location.href = "#home";
+	  }
+	  
+	  //run to load the database information
+	  function loadDB()
+	  {
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the information from the database
+		db.transaction(displayInfo, Error);
+	  }
+	  
+	  //populates the DB when it is reset
+	  function populateDB(tx)
+	  {
+		//Split the text data into lines based on the new line character
+		var lines = data.split(/\n/);
+		for(var i = 0; i < lines.length; i++)
+		{
+			tx.executeSql(lines[i]);
+		}		
+	  }
+	 
+	 //Generic error alert
+	  function Error(error)
+	  {
+		alert("Error: " + error.code + ": " + error.message);
+	  }
+	  
+//Home page functions
+	  //Starts the sequence for displaying the book and loan info
+	  function displayInfo(tx, results)
+	  {
+		//Retrieve the number of books and the number of loans we have in the database
+		tx.executeSql('SELECT * FROM Books', [], booksCount, Error);
+		tx.executeSql('SELECT * FROM Loans', [], loansCount, Error);
+		
+	  }
+	  
+	  //displays the loan count
+	  function loansCount(tx, results)
+	  {
+		var count = results.rows.length;
+		
+		document.getElementById('loanCount').innerHTML = count;
+		
+	  }
+	  
+	  //displays the book count
+	  function booksCount(tx, results)
+	  {
+		var count = results.rows.length;
+		
+		document.getElementById('bookCount').innerHTML = count;
+	  }
+	  
+//Shelf page functions
+	  //Opens the DB for loading the books
+	  function loadShelf()
+	  {
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the shelf data
+		db.transaction(callShelf, Error);
+	  }
+	  
+	  //Select statement to get all the books
+	  function callShelf(tx)
+	  {
+		tx.executeSql('SELECT * FROM Author', [], displayShelf, Error);
+	  }
+	  
+	  //Displays the authors as collapsibles that contain the titles of all their books
+	  function displayShelf(tx, results)
+	  {
+		var shelf = document.getElementById('shelfContent');
+		
+		var len = results.rows.length;
+		
+		//Holds the html we will be adding to the page
+		var html = "";
+		
+		for(var i = 0; i < len; i++)
+		{
+			var author = results.rows.item(i).name;
+		
+			html += '<div data-role="collapsible" data-inset="false">';
+			html += '<h2>' + author + '</h2>';
+			html += '<p id="' + author + '"></p>';
+			html += '</div>';
+			
+			tx.executeSql('SELECT * FROM Books WHERE author = ? ORDER BY standing', [author], displayBooks, Error);
+			
+		}
+		
+		shelf.innerHTML = html;
+		$('[data-role=collapsible]').collapsible().trigger('create');
+		
+		
+	  }
+	  
+	  //displays the books by that author in the collapsibles
+	  function displayBooks(tx, results)
+	  {
+		var len = results.rows.length;
+		
+		var author = results.rows.item(0).author;
+		
+		var container = document.getElementById("" + author);
+		
+		var html = "";
+		
+		for(var i = 0; i < len; i++)
+		{
+			html += '<p>' + results. rows.item(i).standing + ") " + results.rows.item(i).title + '</p>';	
+		}
+		
+		container.innerHTML = html;
+	  }
+	  
+//Loans page functions
+	  //starts the sequence for displaying the loans
+	  function loadLoans()
+	  {
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the shelf data
+		db.transaction(displayLoans, Error);
+	  }
+	  
+	  //Calls all the loans from the DB
+	  function displayLoans(tx)
+	  {
+		tx.executeSql('SELECT * FROM Loans ORDER BY contact', [], displayLoans2, Error);
+	  }
+	  
+	  //displays the listview of loans
+	  function displayLoans2(tx, results)
+	  {
+		var len = results.rows.length;
+		
+		var html = "<ul data-role=\"listview\" id='loanList'>";
+		
+		for(var i = 0; i < len; i++)
+		{
+			var contact = results.rows.item(i).contact;
+			var book = results.rows.item(i).book;
+		
+			html += "<li onclick='loadContactLoans(\"" + contact + "\", \"" + book + "\")'>" + contact + ": "+ book +"</li>";
+		}
+		
+		html += "</ul>";
+		document.getElementById('loanContent').innerHTML = html;
+		
+		$("#loanList").listview().listview("refresh");
+		
+	
+		}
+		
+		//saves the info for displaying a specific loan
+		function loadContactLoans(contact, book)
+		{
+			localStorage.setItem("contact", contact);
+			localStorage.setItem("book", book);
+			window.location.href = "#loanInfo";
+		}
+		
+		//Starts the sequence of pulling the loans from the DB
+		function displayContactLoans()
+		{
+			//Open the db, run a transaction
+			var db = window.openDatabase("Test", "1.0", "Test", 200000);
+			//display the shelf data
+			db.transaction(displayLoanInfo, Error);
+		
+		}
+		
+		//select statement to get the loans
+		function displayLoanInfo(tx)
+		{
+			var contact = localStorage.getItem("contact");
+			var book = localStorage.getItem("book");
+		
+			tx.executeSql("SELECT * FROM Loans WHERE book = ? AND contact = ?", [book, contact], displayLoanInfo2, Error);
+		
+		}
+		
+		//actually displays the loans to the user
+		function displayLoanInfo2(tx, results)
+		{
+			var contact = results.rows.item(0).contact;
+			var book = results.rows.item(0).book;
+			var date = results.rows.item(0).date;
+			
+			document.getElementById('loanTitle').innerHTML = contact;	
+
+				//Display the book title
+				html = "<h3 style='margin: 0em;'>Book Borrowed: </h3><h4 style='margin: 0em;'>" + book + "</h4><br />";
+				html += "<h3 style='margin: 0em;'>Date Borrowed: </h3><h4 style='margin: 0em;'>" + date + "</h4>";
+				
+				
+			document.getElementById("loanInfoContent").innerHTML = html;	
+		}
+		
+//Settings page functions, loans
+	  //Starts the DB and the sequence for saving a loan
+	  function addLoan()
+	  {
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the shelf data
+		db.transaction(displayBooksAdd, Error);
+	  }
+	  
+	  //Pulls the books from the Database
+	  function displayBooksAdd(tx)
+	  {
+		tx.executeSql('SELECT * FROM Books', [], displayBooks2, Error);
+	  }
+	  
+	  //displays the books in a select box
+	  function displayBooks2(tx, results)
+	  {
+		var len = results.rows.length;
+	  
+		var html = "<label for='books' class='select'>Select a Book:</label>";
+		html += "<select name='books' id='books' class='select' style='width: 100%;'>";
+		
+		//dropdown of all the books
+		for(var i = 0; i < len; i++)
+		{
+			html += "<option value='" + results.rows.item(i).title + "'>" + results.rows.item(i).title + "</option>";
+		}
+		html += "</select>";
+		//append the dropdown to the page
+		document.getElementById('bookContent').innerHTML = html;
+		displayContacts();
+	  }
+	  
+	  //Pulls the contacts from the phone
+	  function displayContacts()
+	  {
+		var options = new ContactFindOptions();
+		options.filter = "";
+		options.multiple = true;
+		fields = ["displayName"];
+		navigator.contacts.find(fields, contactSuccess, Error, options);
+	  }
+	  
+	  //Displays the contacts in a select box
+	  function contactSuccess(contacts)
+	  {
+		var html = "<label for='contacts' class='select'>Select a Contact:</label>";
+		html += "<select name='contacts' id='contacts'  style='width: 100%;'>";
+		
+		//Dropdown of contacts
+		for(var i = 0; i < contacts.length; i++)
+		{
+			html += "<option value='" +contacts[i].displayName +"'>" +contacts[i].displayName + "</option>";
+		}
+		html += "</select>";
+		//append the dropdown to the page
+		document.getElementById('contactContent').innerHTML = html;
+	
+	  }
+	  
+	  //Variables to hold the information to be saved as a loan
+	  var contact = "";
+	  var book = "";
+	  var date = "";
+	  
+	  //sets the global variables and prepares the DB for a transaction
+	  function saveLoan()
+	  {
+		var rawDate = new Date();
+		
+		rawDate = rawDate.toString();
+		
+		//Truncate the time off the date
+		dateArray = rawDate.split(" ");
+		
+		date = dateArray[0] + ", " + dateArray[1] + " " + dateArray[2] + ", " + dateArray[3];
+		
+		contact = document.getElementById("contacts").value;
+		book = document.getElementById("books").value;
+		
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//start the loan saving process
+		db.transaction(saveLoan2, saveLoanError);		
+	  }
+	  
+	  //Runs the SQL and redirects the user back to the loans page
+	  function saveLoan2(tx)
+	  {
+		var insertLoan = 'INSERT INTO Loans (book, contact, date) VALUES ("' + book + '", "' + contact + '", "' + date + '")';
+		tx.executeSql(insertLoan);
+		
+		//Toast that the loan was saved
+		window.plugins.toast.showShortBottom("Loan Saved");
+		
+		//Redirect to the loans page
+		window.location.href = "#loans";
+	  }
+		
+		//Handles errors that arise from creating a loan that exists
+	  function saveLoanError(error)
+	  {
+		if(error.code == 6)
+		{
+			alert("That book is already loaned out");
+		}
+		else
+		{
+			Error(error);
+		}
+	  }
+	  
+	  
+	  //Starts the transaction for deleting a loan
+	  function deleteLoan()
+	  {
+		//retrieve a list of all the loans in the DB
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the loans
+		db.transaction(displayLoans1, Error);
+	  }
+	  
+	  //Pulls the current loans to the user
+	  function displayLoans1(tx)
+	  {
+		tx.executeSql('SELECT * FROM Loans ORDER BY contact', [], displayLoansDel2, Error);
+	  }
+	  
+	  //Displays the loans as a listview
+	  function displayLoansDel2(tx, results)
+	  {
+		var len = results.rows.length;
+		
+		var html = "<ul data-role=\"listview\" id='loanListDel'>";
+		
+		for(var i = 0; i < len; i++)
+		{
+			var contact = results.rows.item(i).contact;
+			var book = results.rows.item(i).book;
+			var date = results.rows.item(i).date;
+			html += "<li onclick='delLoan(\"" + contact + "\", \"" + book + "\")'>" + contact + ": "+ book +"<p style='margin-top: 0.5em;'>"+ date +"</p></li>";
+		}
+		
+		html += "</ul>";
+		document.getElementById('delLoanContent').innerHTML = html;
+		
+		$("#loanListDel").listview().listview("refresh");
+	  }
+	  
+	  //global variables for deleting an loan
+	  var delContact = "";
+	  var delBook = "";
+	  
+	  //Start the deletion process for a loan
+	  function delLoan(contact, book)
+	  {
+		delContact = contact;
+		delBook = book;
+		
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the shelf data
+		db.transaction(delLoan2, Error);
+	  }
+	  
+	  //Deletes the loan from the DB
+	  function delLoan2(tx)
+	  {
+		var delSql = "DELETE FROM Loans WHERE contact = '"+ delContact +"' AND book = '"+ delBook +"'";
+		tx.executeSql(delSql);
+		window.location.href = "#loans";
+	  }
+	  
+//settings page functions, shelf
+	  //Starts the DB transaction
+	  function saveBook1()
+	  {
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the shelf data
+		db.transaction(saveBook2, saveBookError);
+		
+	  }
+	  
+	  //Runs the SQL for adding a book
+	  function saveBook2(tx){
+		var author = document.getElementById('author').value;
+		var title = document.getElementById('title').value;
+		var stand = document.getElementById('stand').value;
+		
+		var insertBook = "INSERT INTO Books (title, author, standing) VALUES (\"" + title + "\", \"" + author + "\", \"" + stand + "\")";
+		
+		tx.executeSql(insertBook);
+		
+		tx.executeSql('SELECT * FROM Author WHERE name = ?', [author], saveAuthor, Error);
+
+	 }
+	 
+	 //Handles errors that arise from saving a book that already exists
+	 function saveBookError(error)
+	 {
+		if(error.code == 6)
+		{
+			alert("That book already exists");
+		}
+		else
+		{
+			Error(error);
+		}
+	 }
+	 
+	 //If the author is a new author, adds the author to the DB
+	 function saveAuthor(tx, results)
+	 {
+		var author = document.getElementById('author').value;
+	 
+		var count = results.rows.length;
+		
+		if(count === 0)
+		{
+			var insertAuthor = "INSERT INTO Author (name) VALUES (\"" + author + "\")";
+			tx.executeSql(insertAuthor);
+		}
+		redirectToShelf();
+	 }
+	 
+	 
+	 //resets the page and returns the user to the shelf
+	 function redirectToShelf()
+	 {		
+		//Toast to the user to let them know
+		window.plugins.toast.showShortBottom("Book Saved");
+		document.getElementById('author').value = "";
+		document.getElementById('title').value = "";
+		document.getElementById('stand').value = "";
+		window.location.href = "#shelf";
+	 }
+	 
+	 //start the DB transaction for displaying the books for deletion
+	 function displayRemoveBook()
+	 {
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the shelf data
+		db.transaction(delBookStart, Error);
+	 }
+	 
+	 //Call the DB and retrieve the books
+	 function delBookStart(tx)
+	 {
+		tx.executeSql('SELECT * FROM Books', [], delBookStart2, Error);
+	 }
+	 
+	 //Display the books to the user in a listview
+	 function delBookStart2(tx, results)
+	 {
+		var len = results.rows.length;
+		
+		var html = "<ul data-role=\"listview\" id='bookListDel'>";
+		
+		for(var i = 0; i < len; i++)
+		{
+			var title = results.rows.item(i).title;
+			var author = results.rows.item(i).author;
+		
+			html += "<li onclick='delBook1(\"" + title + "\")'>" + title + "<p style='margin-top: 0.5em;'>"+ author +"</p></li>";
+		}
+		
+		html += "</ul>";
+		document.getElementById('bookDelContent').innerHTML = html;
+		
+		$("#bookListDel").listview().listview("refresh");
+	 }
+	 
+	 //Global variable for deleting a book
+	 var delBook = "";
+	 
+	 //Starts the deletion process
+	 function delBook1(title)
+	 {
+		delBook = title;
+		
+		//Open the db, run a transaction
+		var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		//display the shelf data
+		db.transaction(delBook2, Error);
+	 }
+	 
+	 //Runs the sql to delete the book
+	 function delBook2(tx)
+	 {
+		var delSql = "DELETE FROM Books WHERE title = '"+ delBook +"'";
+		tx.executeSql(delSql);
+		window.location.href = "#shelf";
+	 }
+	 
+	 function emptyBookFields()
+	 {
+		document.getElementById('title').value = "";
+		document.getElementById('author').value = "";
+		document.getElementById('stand').value = "";
+	 }
+//App settings page functions
+	  //resets the DB
+	  function resetDB()
+	  {
+		 //Populate the database from script
+		 //window.resolveLocalFileSystemURL(cordova.file.dataDirectory + "scriptFull.txt", gotFile, Error);
+		 
+		 //Populate to just create the empty tables
+		 var db = window.openDatabase("Test", "1.0", "Test", 200000);
+		 db.transaction(manualPopulate, Error, successDB);
+	  }
+	  
+	  function manualPopulate(tx)
+	  {
+		tx.executeSql('DROP TABLE IF EXISTS Books');
+		tx.executeSql('CREATE TABLE IF NOT EXISTS Books (title unique, author, standing)');
+		tx.executeSql('DROP TABLE IF EXISTS Loans');
+		tx.executeSql('CREATE TABLE IF NOT EXISTS Loans (book unique, contact, date)');
+		tx.executeSql('DROP TABLE IF EXISTS Author');
+		tx.executeSql('CREATE TABLE IF NOT EXISTS Author (name unique)');
+
+	  }
+	  
+   </script>
+   <style>
+	#bookCountLabel, #loanCountLabel {
+		border: 1px solid black;
+		text-align: center;
+		background-color: lightgray;
+		margin: 1em;
+	}	
+   </style>
+   </head>
+   
+   <body onload = "onBodyLoad()">
+   
+   <!--Content pages: Loans, Shelf, and Home -->
+		<div data-role="page" id="home">
+			<div data-role="header">
+			 <a href="#" data-role="button" data-icon="home">Home</a>
+				<h1>BookManager</h1>
+			 <a href="#settings" data-role="button" data-icon="gear">Settings</a>
+			 <div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">	
+				<div id="homeContent">
+				
+				<div id="bookCountLabel">
+				<h3>Current Book Count:</h3>
+				<h2 id="bookCount"></h2>
+				</div>
+				
+				<div id="loanCountLabel">
+				<h3>Current Loan Count:</h3>
+				<h2 id="loanCount"></h2>
+				</div>
+				
+				
+				</div>
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="shelf">
+		 
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>BookShelf</h1>
+				<a href="#settingsShelf" data-role="button" data-icon="gear">Settings</a>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">	
+				<div id="shelfContent">
+				</div>
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="loans">
+		  
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>BookLoans</h1>
+				<a href="#settingsLoans" data-role="button" data-icon="gear">Settings</a>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">	
+				<div id="loanContent">
+							
+				
+				</div>
+			</div><!— /content —>
+		</div><!— /page —>
+
+		
+<!--Settings pages: Loans, Shelf, and App -->	
+		<div data-role="page" id="settingsShelf"> 
+		 
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>Shelf Settings</h1>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">	
+				<div id="setShelf">
+				<a href="#addBook" data-role="button">Add a Book</a>
+				<a href="#removeBook" data-role="button">Remove a Book</a>
+				</div>
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="settingsLoans">
+		  
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>Loan Settings</h1>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">	
+				<input id="btnAdd" type="button" value="Add a Loan" onclick="window.location.href = '#addLoan';" />	
+			<input id="btnDelete" type="button" value="Remove a Loan" onclick="window.location.href = '#deleteLoan';" />	
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="settings">
+		 
+			<div data-role="header">
+				 <a href="#home" data-role="button" data-icon="home">Home</a>
+				 <h1>App Settings</h1>
+				 <div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">	
+				<div id="setApp">
+				<input id="btnLoad" type="button" value="Reset the Database" onclick="resetDB()" />				
+				</div>
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		
+<!--Add/Remove pages: Loans, Shelf-->	
+		<div data-role="page" id="addBook">
+		 
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>Add a Book</h1>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">
+				<label for="title">Book Title:</label>
+				<input id="title" type="text" name="title" />
+				<label for="author">Author Name:</label>
+				<input id="author" type="text" name="author" />
+				<label for="stand">Order in Series:</label>
+				<input id="stand" type="text" name="stand" />
+				<button onclick="saveBook1();">Save</button>
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="removeBook">
+		 
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>Remove Book</h1>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content" id="bookDelContent">
+			
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="loanInfo">
+		 
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1 id="loanTitle"></h1>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content" id="loanInfoContent">
+			
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="addLoan">
+		 
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>Add a Loan</h1>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content">
+			<div id="bookContent"></div>
+			<div id="contactContent"></div>
+			<div id="dateContent"><button onclick="saveLoan();">Save Loan</button></div>
+			
+			</div><!— /content —>
+		</div><!— /page —>
+		
+		<div data-role="page" id="deleteLoan">
+		 
+			<div data-role="header">
+				<a href="#home" data-role="button" data-icon="home">Home</a>
+				<h1>Delete a Loan</h1>
+				<div data-role="navbar">
+    <ul>
+      <li><a href="#shelf">Shelf</a></li>
+      <li><a href="#loans">Loans</a></li>
+    </ul>
+  </div>
+			</div><!— /header —>
+
+			<div data-role="content" id="delLoanContent">
+			
+			</div><!— /content —>
+		</div><!— /page —>
+		
+   </body>
+   
+</html>
